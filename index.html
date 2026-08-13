@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Công Cụ Phân Bổ Hóa Đơn Bán Lẻ (MISA/AMIS) - V8.9 Tobacco Rounded Allocation</title>
+    <title>Công Cụ Phân Bổ Hóa Đơn Bán Lẻ (MISA/AMIS) - V9.0 Specialized BIA & TIEC</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         :root { --primary-color: #007aff; --bg-color: #f5f5f7; --card-bg: #ffffff; --text-color: #1d1d1f; }
@@ -55,9 +55,9 @@
                 <select id="loaiCT" onchange="xuLyDoiLoaiCT()">
                     <option value="PT">PT (Phiếu thu tiền mặt hàng tổng hợp)</option>
                     <option value="NTTK">NTTK (Nộp tiền tài khoản)</option>
-                    <option value="BIA">BIA (Chứng từ chuyên Bia/Nước ngọt - 1 loại/HĐ, SL: 1-5)</option>
+                    <option value="BIA">BIA (Chứng từ Bia/Nước ngọt - SL: 1-2, Phân bổ đều Bia & Nước ngọt)</option>
                     <option value="THUOCLA">THUOCLA (Chứng từ Thuốc lá - 1 loại/HĐ, SL: 1-10)</option>
-                    <option value="TIEC">TIEC (Đơn tiệc lớn 1-100tr: Tối đa 1-2 Bia, Nước ngọt, Thuốc lá - Gọn 2-4 mã)</option>
+                    <option value="TIEC">TIEC (Đơn tiệc lớn 1-100tr: Ưu tiên Bia/Nước ngọt, Thuốc lá ngẫu nhiên ≤20 gói)</option>
                 </select>
             </div>
             <div class="form-group">
@@ -88,7 +88,7 @@
             <label>Chọn File Excel danh mục vật tư</label>
             <input type="file" id="excelFile" accept=".xlsx, .xls">
         </div>
-        <button id="btnChay">TẠO TẤT CẢ CHỨNG TỪ & XUẤT EXCEL (V8.9)</button>
+        <button id="btnChay">TẠO TẤT CẢ CHỨNG TỪ & XUẤT EXCEL (V9.0)</button>
     </div>
 
     <div class="card">
@@ -101,7 +101,6 @@
     document.getElementById('ngayCT').valueAsDate = new Date();
     let danhSachVatTu = [];
 
-    // Tải số chứng từ và số phiếu xuất từ localStorage khi load trang
     window.addEventListener('DOMContentLoaded', () => {
         capNhatSoCTMacDinh();
         capNhatSoPXMacDinh();
@@ -265,9 +264,10 @@
         return 1;
     }
 
+    // CHỈNH SỬA CHẾ ĐỘ BIA: Giới hạn SL từ 1-2 cho hóa đơn bán lẻ Bia/Nước ngọt
     function tinhSoLuongChon(item, loaiCT) {
         if (loaiCT === "BIA") {
-            return Math.floor(Math.random() * 5) + 1;
+            return Math.floor(Math.random() * 2) + 1; // Chọn 1 hoặc 2
         }
         if (loaiCT === "THUOCLA") {
             return Math.floor(Math.random() * 10) + 1;
@@ -410,7 +410,7 @@
         return null;
     }
 
-    // TÍNH NĂNG MỚI TỐI ƯU: ĐƠN TIỆC LỚN (GỌN 2-4 MÃ, KHÔNG NHẶT VẶT LAN MAN)
+    // TÍNH NĂNG MỚI CHỈNH SỬA: ĐƠN TIỆC LỚN (BIA + NƯỚC NGỌT LÀ CHỦ ĐẠO, THUỐC LÁ TỐI ĐA 20 GÓI & NGUYỄN NHIÊN)
     function taoChungTuTiecLon(mucTieu, fullListVatTu) {
         let poolBia = fullListVatTu.filter(x => boDau(x.tenHang).includes("BIA") && x.tonKho > 0);
         let poolNuocNgot = fullListVatTu.filter(x => (boDau(x.tenHang).includes("NUOC NGOT") || boDau(x.tenHang).includes("COCA") || boDau(x.tenHang).includes("COKE") || boDau(x.tenHang).includes("PEPSI")) && x.tonKho > 0);
@@ -426,90 +426,47 @@
             let qtySelected = [];
             let currentTotal = 0;
 
-            // Ngẫu nhiên chọn 1 trong các kịch bản thực tế (Bia, Nước ngọt, Thuốc lá)
-            let mode = Math.random();
+            // Ngẫu nhiên chọn Thuốc lá hay không (Chỉ 35% xác suất có Thuốc lá trong đơn tiệc)
+            let coThuocLa = (poolThuocLa.length > 0) && (Math.random() < 0.35);
 
-            if (mode < 0.35) {
-                // KỊCH BẢN A: 1 Bia (chủ đạo) + 1 Thuốc lá bù khớp
-                let bia = poolBia[Math.floor(Math.random() * poolBia.length)];
+            // KỊCH BẢN CHÍNH: Phân bổ Bia và Nước ngọt
+            let bia = poolBia[Math.floor(Math.random() * poolBia.length)];
+            let tyLeBia = coThuocLa ? (0.70 + Math.random() * 0.15) : (0.85 + Math.random() * 0.10);
+            
+            let targetBiaVal = mucTieu * tyLeBia;
+            let slBia = Math.floor(targetBiaVal / bia.donGia);
+            if (slBia < 1) slBia = 1;
+            slBia = Math.min(slBia, bia.tonKho);
+
+            rowsSelected.push(bia);
+            qtySelected.push(slBia);
+            currentTotal += Math.round(bia.donGia * slBia);
+
+            // Phân bổ Nước ngọt (nếu còn tiền)
+            if (poolNuocNgot.length > 0 && currentTotal < mucTieu) {
+                let nn = poolNuocNgot[Math.floor(Math.random() * poolNuocNgot.length)];
+                let conLaiChoNuoc = mucTieu - currentTotal;
+                let targetNNVal = coThuocLa ? (conLaiChoNuoc * 0.6) : conLaiChoNuoc;
+                let slNN = Math.floor(targetNNVal / nn.donGia);
+                if (slNN >= 1 && slNN <= nn.tonKho) {
+                    rowsSelected.push(nn);
+                    qtySelected.push(slNN);
+                    currentTotal += Math.round(nn.donGia * slNN);
+                }
+            }
+
+            // Thêm Thuốc lá ngẫu nhiên (TỐI ĐA 20 GÓI)
+            if (coThuocLa && currentTotal < mucTieu) {
+                let tl = poolThuocLa[Math.floor(Math.random() * poolThuocLa.length)];
+                let conLai = mucTieu - currentTotal;
+                let slTL = Math.round(conLai / tl.donGia);
                 
-                // Bia chiếm khoảng 85-98% giá trị đơn hàng
-                let targetBiaVal = mucTieu * (0.85 + Math.random() * 0.13);
-                let slBia = Math.floor(targetBiaVal / bia.donGia);
-                if (slBia < 1) slBia = 1;
-                slBia = Math.min(slBia, bia.tonKho);
-
-                rowsSelected.push(bia);
-                qtySelected.push(slBia);
-                currentTotal += Math.round(bia.donGia * slBia);
-
-                if (poolThuocLa.length > 0 && currentTotal < mucTieu) {
-                    let tl = poolThuocLa[Math.floor(Math.random() * poolThuocLa.length)];
-                    let conLai = mucTieu - currentTotal;
-                    let slTL = Math.round(conLai / tl.donGia);
-                    if (slTL >= 1 && slTL <= tl.tonKho) {
-                        rowsSelected.push(tl);
-                        qtySelected.push(slTL);
-                        currentTotal += Math.round(tl.donGia * slTL);
-                    }
-                }
-            } else if (mode < 0.65 && poolBia.length >= 2) {
-                // KỊCH BẢN B: 2 Loại Bia + 1 Thuốc lá
-                let shuffledBia = [...poolBia].sort(() => 0.5 - Math.random());
-                let bia1 = shuffledBia[0];
-                let bia2 = shuffledBia[1];
-
-                let ratioBia1 = 0.4 + Math.random() * 0.3; // 40-70%
-                let slBia1 = Math.floor((mucTieu * ratioBia1) / bia1.donGia);
-                slBia1 = Math.min(Math.max(slBia1, 1), bia1.tonKho);
-
-                let conLaiBia = (mucTieu - (slBia1 * bia1.donGia)) * 0.85;
-                let slBia2 = Math.floor(conLaiBia / bia2.donGia);
-                slBia2 = Math.min(Math.max(slBia2, 1), bia2.tonKho);
-
-                rowsSelected.push(bia1, bia2);
-                qtySelected.push(slBia1, slBia2);
-                currentTotal += Math.round(bia1.donGia * slBia1) + Math.round(bia2.donGia * slBia2);
-
-                if (poolThuocLa.length > 0 && currentTotal < mucTieu) {
-                    let tl = poolThuocLa[Math.floor(Math.random() * poolThuocLa.length)];
-                    let conLai = mucTieu - currentTotal;
-                    let slTL = Math.round(conLai / tl.donGia);
-                    if (slTL >= 1 && slTL <= tl.tonKho) {
-                        rowsSelected.push(tl);
-                        qtySelected.push(slTL);
-                        currentTotal += Math.round(tl.donGia * slTL);
-                    }
-                }
-            } else {
-                // KỊCH BẢN C: 1-2 Bia + 1 Nước ngọt + 1 Thuốc lá (Bán kèm Nước ngọt)
-                let bia = poolBia[Math.floor(Math.random() * poolBia.length)];
-                let slBia = Math.floor((mucTieu * 0.6) / bia.donGia);
-                slBia = Math.min(Math.max(slBia, 1), bia.tonKho);
-
-                rowsSelected.push(bia);
-                qtySelected.push(slBia);
-                currentTotal += Math.round(bia.donGia * slBia);
-
-                if (poolNuocNgot.length > 0) {
-                    let nn = poolNuocNgot[Math.floor(Math.random() * poolNuocNgot.length)];
-                    let slNN = Math.floor(((mucTieu - currentTotal) * 0.7) / nn.donGia);
-                    if (slNN >= 1 && slNN <= nn.tonKho) {
-                        rowsSelected.push(nn);
-                        qtySelected.push(slNN);
-                        currentTotal += Math.round(nn.donGia * slNN);
-                    }
-                }
-
-                if (poolThuocLa.length > 0 && currentTotal < mucTieu) {
-                    let tl = poolThuocLa[Math.floor(Math.random() * poolThuocLa.length)];
-                    let conLai = mucTieu - currentTotal;
-                    let slTL = Math.round(conLai / tl.donGia);
-                    if (slTL >= 1 && slTL <= tl.tonKho) {
-                        rowsSelected.push(tl);
-                        qtySelected.push(slTL);
-                        currentTotal += Math.round(tl.donGia * slTL);
-                    }
+                // Ép giới hạn tối đa 20 gói
+                if (slTL > 20) slTL = Math.floor(Math.random() * 10) + 10; // 10-20 gói
+                if (slTL >= 1 && slTL <= tl.tonKho) {
+                    rowsSelected.push(tl);
+                    qtySelected.push(slTL);
+                    currentTotal += Math.round(tl.donGia * slTL);
                 }
             }
 
@@ -605,9 +562,82 @@
         return { dsChungTu, tongDaTao };
     }
 
+    // PHÂN BỔ BIA / NƯỚC NGỌT CHO TỔNG TIỀN (CHIA SỐ LƯỢNG 1-2 VÀ PHÂN BỔ ĐỀU HAI LOẠI)
+    function sinhChungTuBiaPhanBoTieuChuan(tongTienVND, itemsHopLe, laGiamThue) {
+        let tongDaTao = 0;
+        let dsChungTu = [];
+        const minTarget = tongTienVND * 0.95;
+        const maxTarget = tongTienVND * 1.05;
+
+        // Tách danh sách thành Bia và Nước ngọt để luân phiên chọn
+        let poolBia = itemsHopLe.filter(x => boDau(x.tenHang).includes("BIA"));
+        let poolNuocNgot = itemsHopLe.filter(x => !boDau(x.tenHang).includes("BIA"));
+
+        let chonBiaIndex = Math.random() < 0.5; // Luân phiên bắt đầu
+        let attempts = 0;
+
+        while (tongDaTao < minTarget && attempts < 3000) {
+            attempts++;
+
+            let activePool = chonBiaIndex ? poolBia : poolNuocNgot;
+            if (activePool.length === 0) activePool = itemsHopLe; // Fallback nếu 1 trong 2 loại hết kho
+
+            let itemChon = chonHangTheoTrongSoTon(activePool);
+            if (!itemChon) break;
+
+            let sl = tinhSoLuongChon(itemChon, "BIA"); // Luôn trả về 1 hoặc 2
+            if (itemChon.tonKho < sl) {
+                chonBiaIndex = !chonBiaIndex;
+                continue;
+            }
+
+            let tienGoc = itemChon.donGia * sl;
+            let conLai = maxTarget - tongDaTao;
+
+            if (tienGoc > conLai) {
+                let slFit = Math.floor(conLai / itemChon.donGia);
+                if (slFit >= 1) {
+                    sl = slFit;
+                    tienGoc = itemChon.donGia * sl;
+                } else {
+                    break;
+                }
+            }
+
+            let mucTieuTron = Math.round(tienGoc / 1000) * 1000;
+            if (mucTieuTron < 5000) mucTieuTron = tienGoc;
+
+            let pa = taoMotChungTu(mucTieuTron, [itemChon], laGiamThue, "BIA");
+            if (!pa) {
+                let fallbackTotal = itemChon.donGia * sl;
+                pa = {
+                    rows: [itemChon],
+                    qtys: [sl],
+                    adjustMap: {},
+                    tongTienHD: fallbackTotal
+                };
+            }
+
+            dsChungTu.push(pa);
+            tongDaTao += pa.tongTienHD;
+            itemChon.tonKho -= pa.qtys[0];
+
+            // Đổi lượt cho mặt hàng tiếp theo (Đảm bảo phân bổ đều Bia & Nước ngọt)
+            chonBiaIndex = !chonBiaIndex;
+
+            if (tongDaTao >= minTarget && tongDaTao <= maxTarget) break;
+        }
+
+        return { dsChungTu, tongDaTao };
+    }
+
     function sinhChungTuTuTongTienBanLeV7(tongTienVND, itemsHopLe, laGiamThue, loaiCT) {
         if (loaiCT === "THUOCLA") {
             return sinhChungTuThuocLaPhanBoDong(tongTienVND, itemsHopLe, laGiamThue);
+        }
+
+        if (loaiCT === "BIA") {
+            return sinhChungTuBiaPhanBoTieuChuan(tongTienVND, itemsHopLe, laGiamThue);
         }
 
         if (loaiCT === "TIEC") {
@@ -671,7 +701,6 @@
             const tenUp = boDau(item.tenHang);
 
             if (loaiCT === "BIA") {
-                // Bổ sung lọc các loại Nước ngọt trong chế độ BIA
                 return tenUp.includes("BIA") || tenUp.includes("NUOC NGOT") || tenUp.includes("COCA") || tenUp.includes("COKE") || tenUp.includes("PEPSI");
             }
             if (loaiCT === "THUOCLA") {
@@ -709,7 +738,6 @@
                 alert("Vui lòng nhập danh sách giá trị hóa đơn!");
                 return;
             }
-            // Tách theo cả dấu chấm phẩy ';' và dấu khoảng trắng 'space' (hoặc kết hợp)
             let danhSachMucTieu = rawInput.split(/[;\s]+/)
                 .map(v => parseFloat(v.trim()))
                 .filter(v => !isNaN(v) && v > 0)
@@ -844,7 +872,6 @@
             runningSoPX = parsePX.nextFull;
         });
 
-        // Lưu tiến trình mã chứng từ & phiếu xuất tiếp theo vào localStorage
         if (parseCT.prefix) {
             localStorage.setItem('last_seq_' + parseCT.prefix, parseCT.nextNum);
         }
