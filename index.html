@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Công Cụ Phân Bổ Hóa Đơn Bán Lẻ (MISA/AMIS) - V9.4 AUTO PT 70/30 - KIỂM SOÁT TỒN KHO</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        :root { --primary-color: #007aff; --bg-color: #f5f5f7; --card-bg: #ffffff; --text-color: #1d1d1f; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .card { background: var(--card-bg); border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        h2 { margin-top: 0; color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; font-weight: 600; margin-bottom: 5px; font-size: 14px; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+        textarea { height: 80px; font-family: monospace; resize: vertical; }
+        button { background-color: var(--primary-color); color: white; border: none; padding: 12px 20px; font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer; width: 100%; transition: background 0.2s; }
+        button:hover { background-color: #0056b3; }
+        #logArea { background: #272822; color: #f8f8f2; padding: 15px; border-radius: 8px; font-family: "Courier New", Courier, monospace; max-height: 320px; overflow-y: auto; white-space: pre-wrap; font-size: 13px; line-height: 1.4; }
+        .radio-group { display: flex; gap: 20px; margin-bottom: 10px; }
+        .radio-group label { font-weight: normal; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card">
+        <h2>1. CẤU HÌNH & NHẬP GIÁ TRỊ HÓA ĐƠN</h2>
+        
+        <div class="form-group">
+            <label>Phương thức nhập giá trị:</label>
+            <div class="radio-group">
+                <label><input type="radio" name="modeNhap" value="LIST" onclick="doiCheDoNhap()"> Nhập danh sách từng HĐ (phân tách dấu ';' hoặc space)</label>
+                <label><input type="radio" name="modeNhap" value="TOTAL" checked onclick="doiCheDoNhap()"> Nhập TỔNG TIỀN (Phân bổ Bán lẻ tự nhiên, sai số ±5%)</label>
+            </div>
+        </div>
+
+        <div class="form-group" id="groupList" style="display: none;">
+            <label>Danh sách giá trị hóa đơn (Đơn vị: NGHÌN ĐỒNG, phân tách bằng dấu ';' hoặc dấu cách/space):</label>
+            <textarea id="danhSachGiaTri" placeholder="Ví dụ: 250;350 525 1359;45"></textarea>
+            <small style="color: #666;">* Nhập <b>250</b> = <b>250.000đ</b> (Chỉnh giá tối đa ±1% để khớp tròn tiền)</small>
+        </div>
+
+        <div class="form-group" id="groupTotal">
+            <label>Tổng số tiền cần phân bổ (Đơn vị: NGHÌN ĐỒNG, ví dụ 100000 = 100 triệu; hoặc nhập 100tr, 100000000đ):</label>
+            <input type="text" id="tongTienInput" placeholder="Ví dụ: 20000 hoặc 20tr hoặc 50tr">
+            <small style="color: #666;">* Tự động tạo HĐ bán lẻ tròn tiền, tinh chỉnh đơn giá nhẹ (Max ±1%).</small>
+        </div>
+
+        <div class="grid-3">
+            <div class="form-group">
+                <label>Loại chứng từ</label>
+                <select id="loaiCT" onchange="xuLyDoiLoaiCT()">
+                    <option value="PT">PT TỰ ĐỘNG (70% hàng PT + 30% ngẫu nhiên BIA/THUOCLA)</option>
+                    <option value="NTTK">NTTK (Nộp tiền tài khoản)</option>
+                    <option value="BIA">BIA (Chứng từ Bia/Nước ngọt - SL: 1-2, Phân bổ đều Bia & Nước ngọt)</option>
+                    <option value="THUOCLA">THUOCLA (Chứng từ Thuốc lá - 1 loại/HĐ, SL: 1-10)</option>
+                    <option value="TIEC">TIEC (Đơn tiệc lớn 1-100tr: Ưu tiên Bia/Nước ngọt, Thuốc lá ngẫu nhiên ≤20 gói)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Có giảm thuế theo NĐ?</label>
+                <select id="giamThue">
+                    <option value="CO">CO (Có giảm 20% của 1%)</option>
+                    <option value="KHONG">KHONG (Không giảm thuế)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Số chứng từ bắt đầu (Nhập dạng: PT000001, NTTK000001,...)</label>
+                <input type="text" id="soCTInput" value="PT000001">
+            </div>
+            <div class="form-group">
+                <label>Số phiếu xuất bắt đầu (Nhập dạng: XK000001,...)</label>
+                <input type="text" id="soPXInput" value="XK000001">
+            </div>
+            <div class="form-group">
+                <label>Ngày chứng từ</label>
+                <input type="date" id="ngayCT">
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>2. DỮ LIỆU ĐẦU VÀO & XỬ LÝ</h2>
+        <div class="form-group">
+            <label>Chọn File Excel danh mục vật tư</label>
+            <input type="file" id="excelFile" accept=".xlsx, .xls">
+        </div>
+        <button id="btnChay">TẠO TẤT CẢ CHỨNG TỪ & XUẤT EXCEL (V9.4)</button>
+    </div>
+
+    <div class="card">
+        <h2>3. NHẬT KÝ XỬ LÝ HỆ THỐNG & LOG SỬA GIÁ</h2>
+        <div id="logArea">Chưa có hoạt động nào...</div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('ngayCT').valueAsDate = new Date();
+    let danhSachVatTu = [];
+
+    window.addEventListener('DOMContentLoaded', () => {
+        capNhatSoCTMacDinh();
+        capNhatSoPXMacDinh();
+    });
+
+    function capNhatSoCTMacDinh() {
+        const loai = document.getElementById('loaiCT').value;
+        let prefix = "PT";
+        if (loai === "NTTK") prefix = "NTTK";
+        else if (loai === "BIA" || loai === "THUOCLA" || loai === "TIEC") prefix = loai;
+
+        let savedNum = localStorage.getItem('last_seq_' + prefix);
+        let num = savedNum ? parseInt(savedNum, 10) : 1;
+        
+        let padded = String(num).padStart(6, '0');
+        document.getElementById('soCTInput').value = prefix + padded;
+    }
+
+    function capNhatSoPXMacDinh() {
+        let savedNum = localStorage.getItem('last_seq_XK');
+        let num = savedNum ? parseInt(savedNum, 10) : 1;
+        let padded = String(num).padStart(6, '0');
+        document.getElementById('soPXInput').value = "XK" + padded;
+    }
+
+    function doiCheDoNhap() {
+        const mode = document.querySelector('input[name="modeNhap"]:checked').value;
+        if (mode === "LIST") {
+            document.getElementById('groupList').style.display = 'block';
+            document.getElementById('groupTotal').style.display = 'none';
+        } else {
+            document.getElementById('groupList').style.display = 'none';
+            document.getElementById('groupTotal').style.display = 'block';
+        }
+    }
+
+    function xuLyDoiLoaiCT() {
+        const loai = document.getElementById('loaiCT').value;
+        const selectGiamThue = document.getElementById('giamThue');
+        if (loai === "BIA" || loai === "THUOCLA" || loai === "TIEC") {
+            selectGiamThue.value = "KHONG";
+        }
+        capNhatSoCTMacDinh();
+    }
+
+    function parseAndIncrementSoCT(soCTStr) {
+        let match = soCTStr.match(/^([A-Za-z]+)(\d+)$/);
+        if (match) {
+            let prefix = match[1];
+            let numStr = match[2];
+            let nextNum = parseInt(numStr, 10) + 1;
+            let paddedNum = String(nextNum).padStart(numStr.length, '0');
+            return {
+                prefix: prefix,
+                numStr: numStr,
+                nextNum: nextNum,
+                paddedNum: paddedNum,
+                currentFull: prefix + numStr,
+                nextFull: prefix + paddedNum
+            };
+        } else {
+            let numOnly = parseInt(soCTStr, 10);
+            if (!isNaN(numOnly)) {
+                let paddedNum = String(numOnly + 1).padStart(soCTStr.length, '0');
+                return {
+                    prefix: "",
+                    numStr: soCTStr,
+                    nextNum: numOnly + 1,
+                    paddedNum: paddedNum,
+                    currentFull: soCTStr,
+                    nextFull: paddedNum
+                };
+            }
+            return { prefix: soCTStr, numStr: "", nextNum: 1, paddedNum: "", currentFull: soCTStr, nextFull: soCTStr };
+        }
+    }
+
+    document.getElementById('excelFile').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+            try {
+                const data = new Uint8Array(evt.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const ws = workbook.Sheets[workbook.SheetNames[0]];
+                const rawRows = XLSX.utils.sheet_to_json(ws, {header: 1, defval: ""});
+
+                danhSachVatTu = [];
+                const colMa = 1, colTen = 2, colTon = 3, colNhom = 4, colDvt = 5, colGia = 6;
+
+                for (let r = 3; r < rawRows.length; r++) {
+                    const row = rawRows[r];
+                    if (!row || row.length <= colGia) continue;
+
+                    let maValue = row[colMa] ? String(row[colMa]).trim() : "";
+                    if (!maValue) continue;
+
+                    danhSachVatTu.push({
+                        maHang: maValue,
+                        tenHang: row[colTen] ? String(row[colTen]).trim() : "",
+                        tonKho: parseInt(row[colTon]) || 0,
+                        nhomHang: row[colNhom] ? String(row[colNhom]).trim() : "",
+                        dvt: row[colDvt] ? String(row[colDvt]).trim() : "Cái",
+                        donGia: parseFloat(row[colGia]) || 0
+                    });
+                }
+
+                if (danhSachVatTu.length === 0) {
+                    alert("Cảnh báo: Không thể trích xuất được mặt hàng nào!");
+                } else {
+                    alert(`Đã nạp thành công ${danhSachVatTu.length} mặt hàng!`);
+                    log(`Sẵn sàng xử lý với ${danhSachVatTu.length} mặt hàng trong kho.`);
+                }
+            } catch (err) {
+                alert("Lỗi đọc file: " + err.message);
+            }
+        };
+        reader.readAsReadAsBuffer ? reader.readAsReadAsBuffer(file) : reader.readAsArrayBuffer(file);
+    });
+
+    function log(msg) {
+        const area = document.getElementById('logArea');
+        if (area.innerText === "Chưa có hoạt động nào...") area.innerText = "";
+        area.innerText += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+        area.scrollTop = area.scrollHeight;
+    }
+
+    function boDau(str) {
+        return str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toUpperCase() : "";
+    }
+
+    function isThuocNhomBanLe(nhomHang) {
+        const n = boDau(nhomHang);
+        return n.includes("BANLE") || n.includes("BAN LE");
+    }
+
+    function isHangKhongGiamThue(tenHang) {
+        const t = boDau(tenHang);
+        return t.includes("BIA") || t.includes("NUOC NGOT") || t.includes("COCA") || t.includes("COKE") || t.includes("PEPSI") || t.includes("THUOC LA") || t.includes("THUOC") || t.includes("MUOI");
+    }
+
+    function getNhomSanPham(tenHang) {
+        const t = boDau(tenHang);
+        if (t.includes("SUA") || t.includes("MILO") || t.includes("VINAMILK") || t.includes("TOPKID") || t.includes("TH TRUE") || t.includes("SCU") || t.includes("SCA")) return "SUA";
+        if (t.includes("MI ") || t.includes("HAO HAO") || t.includes("PHO ") || t.includes("HU TIEU") || t.includes("KOKOMI") || t.includes("OMACHI") || t.includes("3 MIEN") || t.includes("BUN ")) return "MI";
+        return "KHAC_GIAVI";
+    }
+
+    function getPackingMultiple(maHang, tenHang) {
+        const t = boDau(tenHang);
+        if (maHang === "VT00209" || t.includes("DAU CO")) return 25;
+        if (t.includes("YEN") || t.includes("SANEST")) return 6;
+        if (t.includes("SCU 65ML") || (t.includes("SCU") && t.includes("5")) || t.includes("VI 5")) return 5;
+        if (t.includes("STTT") || t.includes("SCA") || t.includes("SCU") || t.includes("SDD") || 
+            t.includes("SUDD") || t.includes("SUA") || t.includes("SCU130") || t.includes("MILO") || 
+            t.includes("VINAMILK") || t.includes("TOPKID") || t.includes("LOC 4") || t.includes("HOP 4")) {
+            return 4;
+        }
+        return 1;
+    }
+
+    // CHỈNH SỬA CHẾ ĐỘ BIA: Giới hạn SL từ 1-2 cho hóa đơn bán lẻ Bia/Nước ngọt
+    function tinhSoLuongChon(item, loaiCT) {
+        if (loaiCT === "BIA") {
+            return Math.floor(Math.random() * 2) + 1; // Chọn 1 hoặc 2
+        }
+        if (loaiCT === "THUOCLA") {
+            return Math.floor(Math.random() * 10) + 1;
+        }
+
+        if (item.donGia > 200000) {
+            return Math.random() < 0.8 ? 1 : 2;
+        }
+
+        let nhom = getNhomSanPham(item.tenHang);
+        let step = getPackingMultiple(item.maHang, item.tenHang);
+
+        let tonMultiplier = 1;
+        if (item.tonKho >= 10000) {
+            tonMultiplier = Math.floor(Math.random() * 5) + 5;
+        } else if (item.tonKho >= 3000) {
+            tonMultiplier = Math.floor(Math.random() * 3) + 3;
+        } else if (item.tonKho >= 1000) {
+            tonMultiplier = Math.floor(Math.random() * 2) + 2;
+        }
+
+        let baseQty = 1;
+        if (nhom === "SUA" || nhom === "MI") {
+            baseQty = step * (Math.floor(Math.random() * 3) + 1);
+        } else {
+            baseQty = step * (Math.floor(Math.random() * 2) + 1);
+        }
+
+        let totalQty = baseQty * tonMultiplier;
+        return Math.min(totalQty, item.tonKho);
+    }
+
+    function giaSauGiam(donGia, soLuong, laGiamThue) {
+        let tt = Math.round(donGia * soLuong);
+        return laGiamThue ? (tt - Math.round(tt * 0.002)) : tt;
+    }
+
+    function chonHangTheoTrongSoTon(itemsList) {
+        let itemsAvailable = itemsList.filter(x => x.tonKho > 0);
+        if (itemsAvailable.length === 0) return null;
+
+        let tongTon = itemsAvailable.reduce((sum, item) => sum + item.tonKho, 0);
+        let rand = Math.random() * tongTon;
+        let cumulative = 0;
+
+        for (let item of itemsAvailable) {
+            cumulative += item.tonKho;
+            if (rand <= cumulative) return item;
+        }
+        return itemsAvailable[0];
+    }
+
+    function taoMotChungTu(mucTieu, itemsHopLe, laGiamThue, loaiCT) {
+        let maxAttempts = (loaiCT === "BIA" || loaiCT === "THUOCLA") ? 10000 : 35000;
+        
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            let rowsSelected = [];
+            let qtySelected = [];
+            let currentTotal = 0;
+
+            if (loaiCT === "BIA" || loaiCT === "THUOCLA") {
+                let item = chonHangTheoTrongSoTon(itemsHopLe);
+                if (!item) break;
+
+                let sl = tinhSoLuongChon(item, loaiCT);
+                if (item.tonKho < sl) continue;
+
+                rowsSelected.push(item);
+                qtySelected.push(sl);
+                currentTotal = giaSauGiam(item.donGia, sl, laGiamThue);
+            } else {
+                let poolTemp = [...itemsHopLe];
+                let selectedMap = new Set();
+
+                while (poolTemp.length > 0) {
+                    let itemChon = chonHangTheoTrongSoTon(poolTemp);
+                    if (!itemChon) break;
+
+                    if (!selectedMap.has(itemChon.maHang)) {
+                        selectedMap.add(itemChon.maHang);
+                        let sl = tinhSoLuongChon(itemChon, loaiCT);
+
+                        if (itemChon.tonKho >= sl) {
+                            let lineVal = giaSauGiam(itemChon.donGia, sl, laGiamThue);
+                            
+                            if (currentTotal + lineVal > mucTieu * 1.05 && rowsSelected.length > 0) {
+                                poolTemp = poolTemp.filter(x => x.maHang !== itemChon.maHang);
+                                continue;
+                            }
+
+                            rowsSelected.push(itemChon);
+                            qtySelected.push(sl);
+                            currentTotal += lineVal;
+
+                            if (currentTotal >= mucTieu - (mucTieu * 0.01)) {
+                                break;
+                            }
+                        }
+                    }
+                    poolTemp = poolTemp.filter(x => x.maHang !== itemChon.maHang);
+                }
+            }
+
+            if (rowsSelected.length === 0) continue;
+
+            let diff = mucTieu - currentTotal;
+            let adjustMap = {};
+
+            if (diff !== 0) {
+                for (let i = 0; i < rowsSelected.length; i++) {
+                    let item = rowsSelected[i];
+                    let sl = qtySelected[i];
+                    let oldLine = giaSauGiam(item.donGia, sl, laGiamThue);
+                    let targetLine = oldLine + diff;
+
+                    if (targetLine > 0) {
+                        let newGia = laGiamThue ? Math.round((targetLine / 0.998) / sl) : Math.round(targetLine / sl);
+                        
+                        let capLech = 0.01;
+                        let minGia = Math.ceil(item.donGia * (1 - capLech));
+                        let maxGia = item.donGia >= 100000 ? item.donGia : Math.floor(item.donGia * (1 + capLech));
+
+                        if (newGia >= minGia && newGia <= maxGia) {
+                            let checkLine = giaSauGiam(newGia, sl, laGiamThue);
+                            if (checkLine - oldLine === diff) {
+                                adjustMap[i] = { oldGia: item.donGia, newGia: newGia, maHang: item.maHang };
+                                currentTotal += diff;
+                                diff = 0;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (currentTotal === mucTieu) {
+                return { rows: rowsSelected, qtys: qtySelected, adjustMap: adjustMap, tongTienHD: currentTotal };
+            }
+        }
+        return null;
+    }
+
+    // CHỈNH RIÊNG CHẾ ĐỘ TIEC:
+    // - Bia/Nước ngọt vẫn là thành phần chính
+    // - Thuốc lá xuất hiện ngẫu nhiên, tối đa 20 gói
+    // - Cho phép nhiều dòng hàng để tránh kẹt khi phải khớp số tiền lớn
+    // - Vẫn chỉ chỉnh đơn giá trong giới hạn ±1%
+    function taoChungTuTiecLon(mucTieu, fullListVatTu) {
+        let poolBia = fullListVatTu.filter(x =>
+            boDau(x.tenHang).includes("BIA") && x.tonKho > 0 && x.donGia > 0
+        );
+
+        let poolNuocNgot = fullListVatTu.filter(x => {
+            const t = boDau(x.tenHang);
+            return (t.includes("NUOC NGOT") || t.includes("COCA") || t.includes("COKE") || t.includes("PEPSI"))
+                && x.tonKho > 0 && x.donGia > 0;
+        });
+
+        let poolThuocLa = fullListVatTu.filter(x => {
+            const t = boDau(x.tenHang);
+            return (t.includes("THUOC LA") || t.includes("THUOC"))
+                && !t.includes("MUOI") && x.tonKho > 0 && x.donGia > 0;
+        });
+
+        if (poolBia.length === 0) {
+            alert("Lỗi Đơn Tiệc: Không tìm thấy mặt hàng Bia trong kho!");
+            return null;
+        }
+
+        const poolDoUong = [...poolBia, ...poolNuocNgot];
+
+        function chonNgauNhien(pool) {
+            if (!pool || pool.length === 0) return null;
+            return pool[Math.floor(Math.random() * pool.length)];
+        }
+
+        function gioiHanGia(item) {
+            const capLech = 0.01;
+            return {
+                minGia: Math.ceil(item.donGia * (1 - capLech)),
+                maxGia: item.donGia >= 100000
+                    ? item.donGia
+                    : Math.floor(item.donGia * (1 + capLech))
+            };
+        }
+
+        // Tìm cách bù đúng phần chênh lệch bằng tối đa 2 dòng,
+        // trong đó ưu tiên một dòng SL=1 để xử lý phần lẻ chính xác.
+        function canBangChenhLech(rowsSelected, qtySelected, currentTotal) {
+            let diff = mucTieu - currentTotal;
+            let adjustMap = {};
+
+            if (diff === 0) {
+                return { ok: true, adjustMap, total: currentTotal };
+            }
+
+            // 1) Thử chỉnh một dòng duy nhất.
+            for (let i = 0; i < rowsSelected.length; i++) {
+                let item = rowsSelected[i];
+                let sl = qtySelected[i];
+                if (sl <= 0 || diff % sl !== 0) continue;
+
+                let deltaGia = diff / sl;
+                let newGia = item.donGia + deltaGia;
+                let lim = gioiHanGia(item);
+
+                if (Number.isInteger(newGia) && newGia >= lim.minGia && newGia <= lim.maxGia) {
+                    adjustMap[i] = {
+                        oldGia: item.donGia,
+                        newGia: newGia,
+                        maHang: item.maHang
+                    };
+                    return { ok: true, adjustMap, total: mucTieu };
+                }
+            }
+
+            // 2) Thử phối hợp một dòng số lượng lớn + một dòng SL=1.
+            let tunerIndexes = [];
+            for (let i = 0; i < qtySelected.length; i++) {
+                if (qtySelected[i] === 1) tunerIndexes.push(i);
+            }
+
+            for (let t of tunerIndexes) {
+                let tuner = rowsSelected[t];
+                let limT = gioiHanGia(tuner);
+                let minDeltaT = limT.minGia - tuner.donGia;
+                let maxDeltaT = limT.maxGia - tuner.donGia;
+
+                // Có thể chỉ cần chỉnh dòng SL=1.
+                if (diff >= minDeltaT && diff <= maxDeltaT) {
+                    adjustMap[t] = {
+                        oldGia: tuner.donGia,
+                        newGia: tuner.donGia + diff,
+                        maHang: tuner.maHang
+                    };
+                    return { ok: true, adjustMap, total: mucTieu };
+                }
+
+                for (let i = 0; i < rowsSelected.length; i++) {
+                    if (i === t) continue;
+
+                    let item = rowsSelected[i];
+                    let sl = qtySelected[i];
+                    if (sl <= 0) continue;
+
+                    let lim = gioiHanGia(item);
+                    let minDelta = lim.minGia - item.donGia;
+                    let maxDelta = lim.maxGia - item.donGia;
+
+                    let ideal = Math.round(diff / sl);
+                    let start = Math.max(minDelta, ideal - 20);
+                    let end = Math.min(maxDelta, ideal + 20);
+
+                    for (let deltaGia = start; deltaGia <= end; deltaGia++) {
+                        let conLai = diff - (deltaGia * sl);
+                        if (conLai < minDeltaT || conLai > maxDeltaT) continue;
+
+                        if (deltaGia !== 0) {
+                            adjustMap[i] = {
+                                oldGia: item.donGia,
+                                newGia: item.donGia + deltaGia,
+                                maHang: item.maHang
+                            };
+                        }
+
+                        if (conLai !== 0) {
+                            adjustMap[t] = {
+                                oldGia: tuner.donGia,
+                                newGia: tuner.donGia + conLai,
+                                maHang: tuner.maHang
+                            };
+                        }
+
+                        return { ok: true, adjustMap, total: mucTieu };
+                    }
+                }
+            }
+
+            return { ok: false };
+        }
+
+        // Giảm mạnh số vòng lặp so với bản cũ để không làm treo trình duyệt.
+        for (let attempt = 0; attempt < 5000; attempt++) {
+            let rowsSelected = [];
+            let qtySelected = [];
+            let currentTotal = 0;
+            let used = new Set();
+
+            function themDong(item, sl) {
+                if (!item || sl < 1 || item.tonKho < sl) return false;
+                rowsSelected.push(item);
+                qtySelected.push(sl);
+                currentTotal += Math.round(item.donGia * sl);
+                used.add(item.maHang);
+                return true;
+            }
+
+            // 1. Bia chiếm phần chính của đơn.
+            let bia = chonNgauNhien(poolBia);
+            let tyLeBia = 0.58 + Math.random() * 0.17; // khoảng 58% - 75%
+            let slBia = Math.floor((mucTieu * tyLeBia) / bia.donGia);
+            slBia = Math.max(1, Math.min(slBia, bia.tonKho));
+
+            if (!themDong(bia, slBia)) continue;
+            if (currentTotal > mucTieu * 1.01) continue;
+
+            // 2. Thêm nước ngọt, nếu kho có.
+            if (poolNuocNgot.length > 0 && currentTotal < mucTieu) {
+                let nn = chonNgauNhien(poolNuocNgot);
+                let mucNN = mucTieu * (0.12 + Math.random() * 0.13); // khoảng 12% - 25%
+                let slNN = Math.floor(mucNN / nn.donGia);
+                slNN = Math.min(slNN, nn.tonKho);
+
+                if (slNN >= 1 && currentTotal + nn.donGia * slNN <= mucTieu * 1.005) {
+                    themDong(nn, slNN);
+                }
+            }
+
+            // 3. Thuốc lá ngẫu nhiên 35%, tối đa 20 gói.
+            let coThuocLa = poolThuocLa.length > 0 && Math.random() < 0.35;
+            if (coThuocLa && currentTotal < mucTieu) {
+                let tl = chonNgauNhien(poolThuocLa);
+                let conLai = mucTieu - currentTotal;
+                let maxTheoTien = Math.floor(conLai / tl.donGia);
+                let maxSL = Math.min(20, tl.tonKho, maxTheoTien);
+
+                if (maxSL >= 1) {
+                    let slTL = Math.floor(Math.random() * maxSL) + 1;
+                    themDong(tl, slTL);
+                }
+            }
+
+            // 4. Chừa một dòng SL=1 để tinh chỉnh phần lẻ chính xác.
+            let poolTuner = poolDoUong.filter(x => x.tonKho >= 1 && !used.has(x.maHang));
+            if (poolTuner.length === 0) {
+                poolTuner = poolDoUong.filter(x => x.tonKho >= 1);
+            }
+            let tuner = chonNgauNhien(poolTuner);
+            if (!tuner) continue;
+
+            // 5. Lấp phần tiền còn lại bằng thêm 1-2 dòng đồ uống,
+            // nhưng luôn chừa đủ tiền cho dòng tinh chỉnh SL=1.
+            for (let fillRound = 0; fillRound < 3; fillRound++) {
+                let conLai = mucTieu - currentTotal - tuner.donGia;
+                if (conLai <= 0) break;
+
+                let fillPool = poolDoUong.filter(x => x.tonKho > 0 && x.maHang !== tuner.maHang);
+                let fill = chonNgauNhien(fillPool);
+                if (!fill) break;
+
+                let slFit = Math.floor(conLai / fill.donGia);
+                if (slFit < 1) break;
+
+                slFit = Math.min(slFit, fill.tonKho);
+
+                // Tránh tạo thêm một dòng quá nhỏ nếu đã gần mục tiêu.
+                if (slFit >= 1) {
+                    themDong(fill, slFit);
+                }
+            }
+
+            // Thêm dòng SL=1 để xử lý tiền lẻ.
+            if (currentTotal + tuner.donGia <= mucTieu * 1.01) {
+                themDong(tuner, 1);
+            } else {
+                continue;
+            }
+
+            if (rowsSelected.length === 0) continue;
+
+            let ketQuaCanBang = canBangChenhLech(rowsSelected, qtySelected, currentTotal);
+            if (ketQuaCanBang.ok) {
+                return {
+                    rows: rowsSelected,
+                    qtys: qtySelected,
+                    adjustMap: ketQuaCanBang.adjustMap,
+                    tongTienHD: ketQuaCanBang.total
+                };
+            }
+        }
+
+        return null;
+    }
+
+
+    function sinhChungTuThuocLaPhanBoDong(tongTienVND, itemsHopLe, laGiamThue) {
+        let tongDaTao = 0;
+        let dsChungTu = [];
+        const minTarget = tongTienVND * 0.95;
+        const maxTarget = tongTienVND * 1.05;
+
+        let attempts = 0;
+        while (tongDaTao < minTarget && attempts < 2500) {
+            attempts++;
+
+            let itemChon = chonHangTheoTrongSoTon(itemsHopLe);
+            if (!itemChon) break;
+
+            let sl = tinhSoLuongChon(itemChon, "THUOCLA");
+            if (itemChon.tonKho < sl) continue;
+
+            let tienGoc = itemChon.donGia * sl;
+            let conLai = maxTarget - tongDaTao;
+
+            if (tienGoc > conLai) {
+                let slFit = Math.floor(conLai / itemChon.donGia);
+                if (slFit >= 1) {
+                    sl = slFit;
+                    tienGoc = itemChon.donGia * sl;
+                } else {
+                    break;
+                }
+            }
+
+            let mucTieuTron = Math.round(tienGoc / 1000) * 1000;
+            if (mucTieuTron < 5000) mucTieuTron = tienGoc;
+
+            let pa = taoMotChungTu(mucTieuTron, [itemChon], laGiamThue, "THUOCLA");
+            if (!pa) {
+                let fallbackTotal = itemChon.donGia * sl;
+                pa = {
+                    rows: [itemChon],
+                    qtys: [sl],
+                    adjustMap: {},
+                    tongTienHD: fallbackTotal
+                };
+            }
+
+            dsChungTu.push(pa);
+            tongDaTao += pa.tongTienHD;
+            itemChon.tonKho -= pa.qtys[0];
+
+            if (tongDaTao >= minTarget && tongDaTao <= maxTarget) break;
+        }
+
+        return { dsChungTu, tongDaTao };
+    }
+
+    // PHÂN BỔ BIA / NƯỚC NGỌT CHO TỔNG TIỀN (CHIA SỐ LƯỢNG 1-2 VÀ PHÂN BỔ ĐỀU HAI LOẠI)
+    function sinhChungTuBiaPhanBoTieuChuan(tongTienVND, itemsHopLe, laGiamThue) {
+        let tongDaTao = 0;
+        let dsChungTu = [];
+        const minTarget = tongTienVND * 0.95;
+        const maxTarget = tongTienVND * 1.05;
+
+        // Tách danh sách thành Bia và Nước ngọt để luân phiên chọn
+        let poolBia = itemsHopLe.filter(x => boDau(x.tenHang).includes("BIA"));
+        let poolNuocNgot = itemsHopLe.filter(x => !boDau(x.tenHang).includes("BIA"));
+
+        let chonBiaIndex = Math.random() < 0.5; // Luân phiên bắt đầu
+        let attempts = 0;
+
+        while (tongDaTao < minTarget && attempts < 3000) {
+            attempts++;
+
+            let activePool = chonBiaIndex ? poolBia : poolNuocNgot;
+            if (activePool.length === 0) activePool = itemsHopLe; // Fallback nếu 1 trong 2 loại hết kho
+
+            let itemChon = chonHangTheoTrongSoTon(activePool);
+            if (!itemChon) break;
+
+            let sl = tinhSoLuongChon(itemChon, "BIA"); // Luôn trả về 1 hoặc 2
+            if (itemChon.tonKho < sl) {
+                chonBiaIndex = !chonBiaIndex;
+                continue;
+            }
+
+            let tienGoc = itemChon.donGia * sl;
+            let conLai = maxTarget - tongDaTao;
+
+            if (tienGoc > conLai) {
+                let slFit = Math.floor(conLai / itemChon.donGia);
+                if (slFit >= 1) {
+                    sl = slFit;
+                    tienGoc = itemChon.donGia * sl;
+                } else {
+                    break;
+                }
+            }
+
+            let mucTieuTron = Math.round(tienGoc / 1000) * 1000;
+            if (mucTieuTron < 5000) mucTieuTron = tienGoc;
+
+            let pa = taoMotChungTu(mucTieuTron, [itemChon], laGiamThue, "BIA");
+            if (!pa) {
+                let fallbackTotal = itemChon.donGia * sl;
+                pa = {
+                    rows: [itemChon],
+                    qtys: [sl],
+                    adjustMap: {},
+                    tongTienHD: fallbackTotal
+                };
+            }
+
+            dsChungTu.push(pa);
+            tongDaTao += pa.tongTienHD;
+            itemChon.tonKho -= pa.qtys[0];
+
+            // Đổi lượt cho mặt hàng tiếp theo (Đảm bảo phân bổ đều Bia & Nước ngọt)
+            chonBiaIndex = !chonBiaIndex;
+
+            if (tongDaTao >= minTarget && tongDaTao <= maxTarget) break;
+        }
+
+        return { dsChungTu, tongDaTao };
+    }
+
+
+    // CHẾ ĐỘ PT TỰ ĐỘNG:
+    // Tổng tiền được chia mục tiêu 70% theo đúng quy tắc PT,
+    // 30% còn lại chia ngẫu nhiên cho BIA và THUOCLA.
+    // Mỗi chứng từ mang cờ giảm thuế riêng để BIA/THUOCLA luôn KHÔNG giảm thuế.
+    function sinhChungTuPTTuDong80_20(tongTienVND, fullListVatTu, laGiamThuePT) {
+        const mucTieuPT = Math.round(tongTienVND * 0.70);
+        const mucTieuPhu = tongTienVND - mucTieuPT;
+
+        let poolPT = fullListVatTu.filter(item => {
+            if (item.tonKho <= 0 || item.donGia <= 0) return false;
+            const multiple = getPackingMultiple(item.maHang, item.tenHang);
+            if (item.tonKho < multiple) return false;
+            const thuocBanLe = isThuocNhomBanLe(item.nhomHang);
+            const khongGiamThue = isHangKhongGiamThue(item.tenHang);
+            if (laGiamThuePT) return thuocBanLe && !khongGiamThue;
+            return khongGiamThue;
+        });
+
+        let poolBia = fullListVatTu.filter(item => {
+            if (item.tonKho <= 0 || item.donGia <= 0) return false;
+            const t = boDau(item.tenHang);
+            return t.includes("BIA") || t.includes("NUOC NGOT") || t.includes("COCA") || t.includes("COKE") || t.includes("PEPSI");
+        });
+
+        let poolThuocLa = fullListVatTu.filter(item => {
+            if (item.tonKho <= 0 || item.donGia <= 0) return false;
+            const t = boDau(item.tenHang);
+            return t.includes("THUOC LA") || t.includes("THUOC");
+        });
+
+        if (poolPT.length === 0) {
+            alert("Không tìm thấy hàng hợp lệ cho phần PT (70%). Hãy kiểm tra nhóm hàng, tồn kho và lựa chọn giảm thuế.");
+            return { dsChungTu: [], tongDaTao: 0 };
+        }
+        if (poolBia.length === 0 && poolThuocLa.length === 0) {
+            alert("Không tìm thấy hàng BIA/NƯỚC NGỌT hoặc THUỐC LÁ cho phần 30%.");
+            return { dsChungTu: [], tongDaTao: 0 };
+        }
+
+        // QUAN TRỌNG: Cả ba pool dùng cùng đối tượng tồn kho của fullListVatTu.
+        // fullListVatTu vốn đã được clone một lần ở nút chạy, nên không ảnh hưởng danh mục gốc.
+        // PT trừ tồn trước, BIA/THUOCLA nhìn thấy số tồn còn lại, tránh xuất trùng vượt kho.
+        let clonePT = poolPT;
+        let cloneBia = poolBia;
+        let cloneThuoc = poolThuocLa;
+        let tatCa = [];
+        let tongDaTao = 0;
+
+        let kqPT = sinhChungTuTuTongTienBanLeV7(mucTieuPT, clonePT, laGiamThuePT, "__PT_CORE__");
+        kqPT.dsChungTu.forEach(pa => {
+            pa._loaiNoiBo = "PT";
+            pa._laGiamThue = laGiamThuePT;
+            tatCa.push(pa);
+        });
+        tongDaTao += kqPT.tongDaTao;
+
+        let mucTieuBia = 0;
+        let mucTieuThuoc = 0;
+        if (poolBia.length > 0 && poolThuocLa.length > 0) {
+            const tyLeBia = 0.30 + Math.random() * 0.40;
+            mucTieuBia = Math.round(mucTieuPhu * tyLeBia);
+            mucTieuThuoc = mucTieuPhu - mucTieuBia;
+        } else if (poolBia.length > 0) {
+            mucTieuBia = mucTieuPhu;
+        } else {
+            mucTieuThuoc = mucTieuPhu;
+        }
+
+        if (mucTieuBia > 0) {
+            let kqBia = sinhChungTuBiaPhanBoTieuChuan(mucTieuBia, cloneBia, false);
+            kqBia.dsChungTu.forEach(pa => {
+                pa._loaiNoiBo = "BIA";
+                pa._laGiamThue = false;
+                tatCa.push(pa);
+            });
+            tongDaTao += kqBia.tongDaTao;
+        }
+
+        if (mucTieuThuoc > 0) {
+            let kqThuoc = sinhChungTuThuocLaPhanBoDong(mucTieuThuoc, cloneThuoc, false);
+            kqThuoc.dsChungTu.forEach(pa => {
+                pa._loaiNoiBo = "THUOCLA";
+                pa._laGiamThue = false;
+                tatCa.push(pa);
+            });
+            tongDaTao += kqThuoc.tongDaTao;
+        }
+
+        log(`👉 PT tự động: mục tiêu PT 70% = ${mucTieuPT.toLocaleString()} đ.`);
+        log(`👉 Phần BIA + THUOCLA 30% = ${mucTieuPhu.toLocaleString()} đ; chia ngẫu nhiên BIA ${mucTieuBia.toLocaleString()} đ + THUOCLA ${mucTieuThuoc.toLocaleString()} đ.`);
+        log(`👉 Giảm thuế: PT = ${laGiamThuePT ? "CÓ" : "KHÔNG"}; BIA = KHÔNG; THUOCLA = KHÔNG.`);
+        return { dsChungTu: tatCa, tongDaTao };
+    }
+
+    // Kiểm tra đầu ra riêng chế độ PT TỰ ĐỘNG; KHÔNG sửa cách chọn hàng của V9.0.
+    // Nếu một điều kiện sai, dừng xuất để người dùng xử lý dữ liệu thực tế thay vì tự thay chứng từ.
+    function kiemTraPhanBoPTTuDong(dsChungTu, danhMucGoc, tongMucTieu, laGiamThuePT) {
+        const loi = [];
+        const tonBanDau = new Map();
+        const daXuat = new Map();
+        const tongTheoNhom = { PT: 0, BIA: 0, THUOCLA: 0 };
+
+        for (const item of danhMucGoc) {
+            const ma = String(item.maHang);
+            if (tonBanDau.has(ma)) {
+                loi.push(`Mã hàng ${ma} bị trùng trong danh mục vật tư; cần kiểm tra trước khi xuất.`);
+            }
+            tonBanDau.set(ma, Math.max(0, Number(item.tonKho) || 0));
+        }
+
+        for (const pa of dsChungTu) {
+            const loai = pa._loaiNoiBo;
+            if (!(loai in tongTheoNhom)) {
+                loi.push('Có chứng từ không xác định được nhóm PT/BIA/THUOCLA.');
+                continue;
+            }
+            const coGiam = pa._laGiamThue === true;
+            if (coGiam !== (loai === 'PT' && laGiamThuePT)) {
+                loi.push(`Sai trạng thái giảm thuế của nhóm ${loai}.`);
+            }
+            if (!pa.rows || pa.rows.length !== pa.qtys.length || pa.rows.length === 0) {
+                loi.push(`Chứng từ ${loai} có số dòng không hợp lệ.`);
+                continue;
+            }
+            if ((loai === 'BIA' || loai === 'THUOCLA') && pa.rows.length !== 1) {
+                loi.push(`Chứng từ ${loai} không đúng quy tắc một mặt hàng/chứng từ.`);
+            }
+
+            let tongTinhLai = 0;
+            for (let i = 0; i < pa.rows.length; i++) {
+                const item = pa.rows[i];
+                const sl = pa.qtys[i];
+                const ma = String(item.maHang);
+                const ten = boDau(item.tenHang);
+                const giaGoc = Number(item.donGia);
+                const giaMoi = pa.adjustMap && pa.adjustMap[i] ? Number(pa.adjustMap[i].newGia) : giaGoc;
+
+                if (!Number.isInteger(sl) || sl <= 0 || !Number.isFinite(giaGoc) || giaGoc <= 0) {
+                    loi.push(`Mã ${ma}: số lượng hoặc đơn giá không hợp lệ.`);
+                    continue;
+                }
+                if (!tonBanDau.has(ma)) loi.push(`Mã ${ma} không có trong danh mục nhập.`);
+                daXuat.set(ma, (daXuat.get(ma) || 0) + sl);
+
+                if (loai === 'BIA' && (sl < 1 || sl > 2 ||
+                    !(ten.includes('BIA') || ten.includes('NUOC NGOT') || ten.includes('COCA') || ten.includes('COKE') || ten.includes('PEPSI')))) {
+                    loi.push(`Mã ${ma}: sai số lượng/loại hàng theo quy tắc BIA.`);
+                }
+                if (loai === 'THUOCLA' && (sl < 1 || sl > 10 ||
+                    !(ten.includes('THUOC LA') || ten.includes('THUOC')))) {
+                    loi.push(`Mã ${ma}: sai số lượng/loại hàng theo quy tắc THUOCLA.`);
+                }
+                if (loai === 'PT') {
+                    const laHangKhongGiam = isHangKhongGiamThue(item.tenHang);
+                    if (laGiamThuePT && (!isThuocNhomBanLe(item.nhomHang) || laHangKhongGiam)) {
+                        loi.push(`Mã ${ma}: không đủ điều kiện lọc nhóm PT giảm thuế.`);
+                    }
+                    if (!laGiamThuePT && !laHangKhongGiam) {
+                        loi.push(`Mã ${ma}: khác quy tắc lọc PT không giảm thuế.`);
+                    }
+                }
+                const minGia = Math.ceil(giaGoc * 0.99);
+                const maxGia = giaGoc >= 100000 ? giaGoc : Math.floor(giaGoc * 1.01);
+                if (giaMoi < minGia || giaMoi > maxGia) {
+                    loi.push(`Mã ${ma}: điều chỉnh giá vượt mức quy định của V9.0.`);
+                }
+                tongTinhLai += giaSauGiam(giaMoi, sl, coGiam);
+            }
+            if (Math.abs(tongTinhLai - pa.tongTienHD) > 0.01) {
+                loi.push(`Nhóm ${loai}: tổng chi tiết khác tổng chứng từ.`);
+            }
+            tongTheoNhom[loai] += pa.tongTienHD;
+        }
+
+        for (const [ma, sl] of daXuat) {
+            if (sl > (tonBanDau.get(ma) || 0)) {
+                loi.push(`Mã ${ma}: xuất ${sl}, vượt tồn ${tonBanDau.get(ma) || 0}.`);
+            }
+        }
+        const mucTieuPT = tongMucTieu * 0.70;
+        const mucTieuKhongPT = tongMucTieu * 0.30;
+        const tongKhongPT = tongTheoNhom.BIA + tongTheoNhom.THUOCLA;
+        const dungKhoang = (thucTe, mucTieu) => mucTieu === 0 ||
+            (thucTe >= mucTieu * 0.95 && thucTe <= mucTieu * 1.05);
+        if (!dungKhoang(tongTheoNhom.PT, mucTieuPT)) {
+            loi.push(`Phần PT chưa đạt phạm vi ±5% mục tiêu 70% (${tongTheoNhom.PT.toLocaleString()}đ).`);
+        }
+        if (!dungKhoang(tongKhongPT, mucTieuKhongPT)) {
+            loi.push(`Phần BIA/THUOCLA chưa đạt phạm vi ±5% mục tiêu 30% (${tongKhongPT.toLocaleString()}đ).`);
+        }
+        return { ok: loi.length === 0, loi, tongTheoNhom };
+    }
+
+    function sinhChungTuTuTongTienBanLeV7(tongTienVND, itemsHopLe, laGiamThue, loaiCT) {
+        if (loaiCT === "__PT_CORE__") loaiCT = "PT";
+
+        if (loaiCT === "THUOCLA") {
+            return sinhChungTuThuocLaPhanBoDong(tongTienVND, itemsHopLe, laGiamThue);
+        }
+
+        if (loaiCT === "BIA") {
+            return sinhChungTuBiaPhanBoTieuChuan(tongTienVND, itemsHopLe, laGiamThue);
+        }
+
+        if (loaiCT === "TIEC") {
+            let pa = taoChungTuTiecLon(tongTienVND, itemsHopLe);
+            if (pa) {
+                return { dsChungTu: [pa], tongDaTao: pa.tongTienHD };
+            }
+            return { dsChungTu: [], tongDaTao: 0 };
+        }
+
+        let tongDaTao = 0;
+        let dsChungTu = [];
+        const minTarget = tongTienVND * 0.95;
+        const maxTarget = tongTienVND * 1.05;
+
+        let attempts = 0;
+        while (tongDaTao < minTarget && attempts < 1500) {
+            attempts++;
+            let conLai = maxTarget - tongDaTao;
+
+            let mucTieuHD = Math.floor(Math.random() * 650 + 200) * 1000;
+            if (mucTieuHD > conLai) mucTieuHD = Math.floor(conLai / 1000) * 1000;
+            if (mucTieuHD < 30000) break;
+
+            let pa = taoMotChungTu(mucTieuHD, itemsHopLe, laGiamThue, loaiCT);
+            if (pa) {
+                dsChungTu.push(pa);
+                tongDaTao += pa.tongTienHD;
+
+                for (let i = 0; i < pa.rows.length; i++) {
+                    let itemInKho = itemsHopLe.find(x => x.maHang === pa.rows[i].maHang);
+                    if (itemInKho) itemInKho.tonKho -= pa.qtys[i];
+                }
+            }
+
+            if (tongDaTao >= minTarget && tongDaTao <= maxTarget) break;
+        }
+
+        return { dsChungTu, tongDaTao };
+    }
+
+    // Đọc tổng tiền đúng đơn vị đã ghi trên giao diện.
+    // Không hậu tố: nghìn đồng; "tr": triệu đồng; "đ"/"vnd": đồng.
+    function docTongTienVND(giaTriNhap) {
+        let s = String(giaTriNhap == null ? "" : giaTriNhap).trim().toLowerCase().replace(/\s+/g, "");
+        if (!s) return NaN;
+        let heSo = 1000;
+        if (/(?:triệu|trieu|tr)$/.test(s)) {
+            s = s.replace(/(?:triệu|trieu|tr)$/, "");
+            heSo = 1000000;
+        } else if (/(?:vnd|vnđ|đ|dong)$/.test(s)) {
+            s = s.replace(/(?:vnd|vnđ|đ|dong)$/, "");
+            heSo = 1;
+        } else if (/(?:nghìn|nghin|k)$/.test(s)) {
+            s = s.replace(/(?:nghìn|nghin|k)$/, "");
+        }
+        // 100.000 hoặc 100,000: dấu phân tách hàng nghìn.
+        if (/^\d{1,3}(?:[.,]\d{3})+$/.test(s)) {
+            s = s.replace(/[.,]/g, "");
+        } else {
+            // Cho phép 1,5tr / 1.5tr.
+            if (!/^\d+(?:[.,]\d+)?$/.test(s)) return NaN;
+            s = s.replace(",", ".");
+        }
+        const soTien = Number(s) * heSo;
+        return Number.isFinite(soTien) && soTien > 0 ? Math.round(soTien) : NaN;
+    }
+
+    document.getElementById('btnChay').addEventListener('click', function() {
+        if (!danhSachVatTu || danhSachVatTu.length === 0) {
+            alert("Vui lòng tải file Excel vật tư trước!");
+            return;
+        }
+
+        const mode = document.querySelector('input[name="modeNhap"]:checked').value;
+        const loaiCT = document.getElementById('loaiCT').value;
+        
+        let laGiamThue = (document.getElementById('giamThue').value === "CO");
+        if (loaiCT === "BIA" || loaiCT === "THUOCLA" || loaiCT === "TIEC") laGiamThue = false;
+
+        let rawSoCT = document.getElementById('soCTInput').value.trim();
+        let rawSoPX = document.getElementById('soPXInput').value.trim();
+        const ngayCT = document.getElementById('ngayCT').value;
+
+        let itemsHopLe = danhSachVatTu.filter(item => {
+            if (item.tonKho <= 0 || item.donGia <= 0) return false;
+
+            const tenUp = boDau(item.tenHang);
+
+            if (loaiCT === "BIA") {
+                return tenUp.includes("BIA") || tenUp.includes("NUOC NGOT") || tenUp.includes("COCA") || tenUp.includes("COKE") || tenUp.includes("PEPSI");
+            }
+            if (loaiCT === "THUOCLA") {
+                return tenUp.includes("THUOC LA") || tenUp.includes("THUOC");
+            }
+
+            if (loaiCT === "TIEC") {
+                return true; 
+            }
+
+            const multiple = getPackingMultiple(item.maHang, item.tenHang);
+            if (item.tonKho < multiple) return false;
+
+            const thuocBanLe = isThuocNhomBanLe(item.nhomHang);
+            const khongGiamThue = isHangKhongGiamThue(item.tenHang);
+
+            if (laGiamThue) {
+                return thuocBanLe && !khongGiamThue; 
+            }
+
+            return khongGiamThue;
+        });
+
+        if (itemsHopLe.length === 0) {
+            alert(`Kho không tìm thấy mặt hàng hợp lệ nào cho loại chứng từ '${loaiCT}'!`);
+            return;
+        }
+
+        let danhSachKieuHD = [];
+        let tongSoHDCanTao = 0;
+
+        if (mode === "LIST") {
+            const rawInput = document.getElementById('danhSachGiaTri').value.trim();
+            if (!rawInput) {
+                alert("Vui lòng nhập danh sách giá trị hóa đơn!");
+                return;
+            }
+            let danhSachMucTieu = rawInput.split(/[;\s]+/)
+                .map(v => parseFloat(v.trim()))
+                .filter(v => !isNaN(v) && v > 0)
+                .map(v => v * 1000);
+
+            tongSoHDCanTao = danhSachMucTieu.length;
+
+            if (tongSoHDCanTao === 0) {
+                alert("Danh sách giá trị không hợp lệ!");
+                return;
+            }
+
+            log(`=== BẮT ĐẦU TẠO ${tongSoHDCanTao} CHỨNG TỪ THEO DANH SÁCH (${loaiCT}) ===`);
+            // Chẩn đoán riêng nhánh LIST; KHÔNG thay đổi thuật toán sinh chứng từ.
+            const dsThatBai = [];
+            const tokenNhap = rawInput.split(/[;\s]+/).filter(x => x.length > 0);
+            const tokenBiBoQua = tokenNhap.filter(x => !(parseFloat(x.trim()) > 0));
+            if (tokenBiBoQua.length > 0) {
+                log(`[NHẬP LIỆU] ${tokenBiBoQua.length} giá trị không hợp lệ đã bị bỏ qua: ${tokenBiBoQua.slice(0, 12).join(' | ')}`);
+            }
+            const tokenCanLuuY = tokenNhap.filter(x => /[,]/.test(x) || /^\d{1,3}(?:\.\d{3})+$/.test(x));
+            if (tokenCanLuuY.length > 0) {
+                log(`[LƯU Ý ĐỊNH DẠNG] Nhập danh sách dùng đơn vị NGHÌN ĐỒNG; các giá trị có dấu phẩy/chấm như ${tokenCanLuuY.slice(0, 8).join(' | ')} có thể bị parseFloat hiểu sai. Ví dụ 1.500 sẽ được hiểu là 1,5 nghìn.`);
+            }
+            danhSachMucTieu.forEach((mucTieu, i) => {
+                let pa = (loaiCT === "TIEC") ? taoChungTuTiecLon(mucTieu, itemsHopLe) : taoMotChungTu(mucTieu, itemsHopLe, laGiamThue, loaiCT);
+                if (pa) {
+                    danhSachKieuHD.push(pa);
+                } else {
+                    dsThatBai.push({stt: i + 1, tien: mucTieu});
+                    log(`[THẤT BẠI #${i + 1}] Không ghép đúng ${(mucTieu).toLocaleString()}đ trong quy tắc ${loaiCT} (giới hạn sửa giá ±1%).`);
+                }
+            });
+            log(`[TỔNG KẾT LIST] ${danhSachKieuHD.length}/${tongSoHDCanTao} chứng từ thành công; ${dsThatBai.length} thất bại.`);
+            if (dsThatBai.length > 0) {
+                const loaiGoiY = loaiCT === "BIA"
+                    ? "BIA chỉ cho phép một mặt hàng, SL 1–2, nên không thể khớp mọi số tiền."
+                    : loaiCT === "THUOCLA"
+                    ? "THUOCLA chỉ cho phép một mặt hàng, SL 1–10, nên không thể khớp mọi số tiền."
+                    : "Không tìm được tổ hợp khớp chính xác trong giới hạn giá và hàng hợp lệ hiện có.";
+                const viDu = dsThatBai.slice(0, 12).map(x => `#${x.stt}: ${x.tien.toLocaleString()}đ`).join(' | ');
+                const thongBao = `Chỉ tạo được ${danhSachKieuHD.length}/${tongSoHDCanTao} chứng từ; còn ${dsThatBai.length} chứng từ chưa tạo.\n${loaiGoiY}\nGiá trị thất bại: ${viDu}${dsThatBai.length > 12 ? ' ...' : ''}\n\nBạn có muốn xuất FILE THIẾU các chứng từ này không? Chọn HỦY để giữ nguyên số chứng từ và kiểm tra lại.`;
+                if (!confirm(thongBao)) {
+                    log('[DỪNG XUẤT] Người dùng chọn không xuất file thiếu chứng từ; số chứng từ chưa được tăng.');
+                    return;
+                }
+            }
+        } else {
+            const totalVal = docTongTienVND(document.getElementById('tongTienInput').value);
+
+            if (isNaN(totalVal) || totalVal < 10000) {
+                alert("Vui lòng nhập tổng số tiền hợp lệ!");
+                return;
+            }
+
+            let cloneItems = itemsHopLe.map(x => ({...x}));
+            let result;
+            if (loaiCT === "PT") {
+                let cloneFullList = danhSachVatTu.map(x => ({...x}));
+                result = sinhChungTuPTTuDong80_20(totalVal, cloneFullList, laGiamThue);
+            } else {
+                result = sinhChungTuTuTongTienBanLeV7(totalVal, cloneItems, laGiamThue, loaiCT);
+            }
+            // Chỉ kiểm tra bổ sung cho PT tự động; các chế độ gốc giữ nguyên.
+            if (loaiCT === 'PT') {
+                const kiemTra = kiemTraPhanBoPTTuDong(result.dsChungTu, danhSachVatTu, totalVal, laGiamThue);
+                if (!kiemTra.ok) {
+                    log('=== KHÔNG XUẤT FILE: CẦN KIỂM TRA PHÂN BỔ PT TỰ ĐỘNG ===');
+                    kiemTra.loi.slice(0, 15).forEach(x => log('[CẢNH BÁO] ' + x));
+                    alert('Chưa thể xuất chứng từ vì kiểm tra an toàn phát hiện vấn đề:\n' +
+                          kiemTra.loi.slice(0, 5).join('\n') +
+                          (kiemTra.loi.length > 5 ? `\n... và ${kiemTra.loi.length - 5} vấn đề khác (xem nhật ký).` : ''));
+                    return;
+                }
+                log(`Đã kiểm tra tồn kho chung và giảm thuế: PT ${kiemTra.tongTheoNhom.PT.toLocaleString()}đ; BIA ${kiemTra.tongTheoNhom.BIA.toLocaleString()}đ; THUOCLA ${kiemTra.tongTheoNhom.THUOCLA.toLocaleString()}đ.`);
+            }
+            danhSachKieuHD = result.dsChungTu;
+            tongSoHDCanTao = danhSachKieuHD.length;
+
+            let ptramDat = ((result.tongDaTao / totalVal) * 100).toFixed(2);
+            log(`=== BẮT ĐẦU PHÂN BỔ BÁN LẺ TỔNG TIỀN ${(totalVal).toLocaleString()} đ (${loaiCT}) ===`);
+            log(`👉 Đã tạo thành công ${danhSachKieuHD.length} HĐ. Tổng thực tế: ${(result.tongDaTao).toLocaleString()} đ (${ptramDat}%).`);
+        }
+
+        if (danhSachKieuHD.length === 0) {
+            alert(`Không thể tạo được chứng từ nào (0/${tongSoHDCanTao}). Vui lòng kiểm tra lại dữ liệu!`);
+            return;
+        }
+
+        let allDataRows = [];
+        allDataRows.push(["FILE MẪU CHỨNG TỪ BÁN HÀNG ĐỂ NHẬP VÀO PHẦN MỀM AMIS ACCOUNTING"]);
+        allDataRows.push(["Hướng dẫn:"]);
+        allDataRows.push(["- Điền dữ liệu vào các cột tương ứng trên file này"]);
+        allDataRows.push(["- Các cột có dấu (*) là những cột bắt buộc"]);
+        
+        let subHeader = Array(41).fill(""); 
+        subHeader[24] = "Chi tiết hàng tiền";
+        subHeader[35] = "Chi tiết giá vốn";
+        subHeader[39] = "Thông tin bổ sung";
+        allDataRows.push(subHeader);
+
+        let headers = [
+            "Hình thức bán hàng", "Phương thức thanh toán", "Kiêm phiếu xuất kho", "Lập kèm hóa đơn",
+            "Là hóa đơn từ máy tính tiền", "Đã lập hóa đơn", "Ngày hạch toán (*)", "Ngày chứng từ (*)",
+            "Số chứng từ (*)", "Số phiếu xuất", "Mẫu số HĐ", "Ký hiệu HĐ", "Số hóa đơn", "Ngày hóa đơn",
+            "Mã khách hàng", "Tên khách hàng", "Địa chỉ", "Mã số thuế", "Đơn vị giao đại lý", "Người nộp",
+            "Nộp vào TK", "Diễn giải/Lý do nộp", "Lý do xuất", "Có phát sinh giảm 20% thuế GTGT",
+            "Mã hàng (*)", "Tên hàng", "Là dòng ghi chú", "Hàng khuyến mại", "ĐVT", "Số lượng",
+            "Đơn giá", "Thành tiền", "Tỷ lệ CK (%)", "Tiền chiết khấu", "Nhóm ngành nghề", "Mã kho",
+            "Đơn giá vốn", "Tiền giá vốn", "TK Kho", "Mã nhân viên bán hàng", "Tên nhân viên bán hàng"
+        ];
+        allDataRows.push(headers);
+
+        let thanhCongCount = 0;
+        let runningSoCT = rawSoCT;
+        let runningSoPX = rawSoPX;
+
+        let parseCT = parseAndIncrementSoCT(runningSoCT);
+        let parsePX = parseAndIncrementSoCT(runningSoPX);
+
+        danhSachKieuHD.forEach((pa) => {
+            let laGiamThueCT = (typeof pa._laGiamThue === "boolean") ? pa._laGiamThue : laGiamThue;
+            let loaiNoiBoCT = pa._loaiNoiBo || loaiCT;
+
+            parseCT = parseAndIncrementSoCT(runningSoCT);
+            parsePX = parseAndIncrementSoCT(runningSoPX);
+
+            let soCT = runningSoCT;
+            let soPX = runningSoPX;
+
+            thanhCongCount++;
+            log(`--------------------------------------------------`);
+            log(`[TC] CT ${soCT} (PX: ${soPX}) [${loaiNoiBoCT}]: Tổng HĐ ${(pa.tongTienHD).toLocaleString()} đ (${pa.rows.length} mã hàng)`);
+
+            if (pa.adjustMap && Object.keys(pa.adjustMap).length > 0) {
+                Object.keys(pa.adjustMap).forEach(idx => {
+                    let adj = pa.adjustMap[idx];
+                    let chênhLệch = adj.newGia - adj.oldGia;
+                    let dau = chênhLệch > 0 ? "+" : "";
+                    let phanTram = ((chênhLệch / adj.oldGia) * 100).toFixed(2);
+                    let phanTramDau = phanTram > 0 ? "+" : "";
+                    log(`   ⚠️ [SỬA GIÁ] Mã [${adj.maHang}]: Giá gốc ${adj.oldGia.toLocaleString()}đ ➔ Giá mới ${adj.newGia.toLocaleString()}đ (${dau}${chênhLệch.toLocaleString()}đ tương ứng ${phanTramDau}${phanTram}%)`);
+                });
+            } else {
+                log(`   ✅ Giá bán giữ nguyên 100% theo giá gốc.`);
+            }
+
+            for (let i = 0; i < pa.rows.length; i++) {
+                let item = pa.rows[i];
+                let sl = pa.qtys[i];
+                let dg = (pa.adjustMap && pa.adjustMap[i]) ? pa.adjustMap[i].newGia : item.donGia;
+                let thanhTien = Math.round(sl * dg);
+                let phuongThucTT = loaiCT === "NTTK" ? "Thu tiền ngay - Chuyển khoản" : "Thu tiền ngay - Tiền mặt";
+
+                if (mode === "LIST") {
+                    let origItem = danhSachVatTu.find(x => x.maHang === item.maHang);
+                    if (origItem) origItem.tonKho -= sl;
+                }
+
+                let rowData = [
+                    "Bán hàng hóa trong nước", phuongThucTT, "Có", "Có", "Có", "Chưa lập",
+                    ngayCT, ngayCT, soCT, soPX, "", "", "", "", "KH00001", "Bán cho người tiêu dùng",
+                    "", "", "", "", (loaiCT === "NTTK" ? "8600021966" : ""), "Thu tiền bán hàng Bán cho người tiêu dùng",
+                    "Xuất kho bán hàng Bán cho người tiêu dùng",
+                    laGiamThueCT ? "Có" : "Không",
+                    item.maHang, item.tenHang, "Không", "Không", item.dvt, sl, dg, thanhTien,
+                    0, 0, "", "Kho HH", 0, 0, "", "", ""
+                ];
+                allDataRows.push(rowData);
+            }
+
+            runningSoCT = parseCT.nextFull;
+            runningSoPX = parsePX.nextFull;
+        });
+
+        if (parseCT.prefix) {
+            localStorage.setItem('last_seq_' + parseCT.prefix, parseCT.nextNum);
+        }
+        if (parsePX.prefix) {
+            localStorage.setItem('last_seq_' + parsePX.prefix, parsePX.nextNum);
+        }
+
+        document.getElementById('soCTInput').value = runningSoCT;
+        document.getElementById('soPXInput').value = runningSoPX;
+
+        if (thanhCongCount > 0) {
+            const ws = XLSX.utils.aoa_to_sheet(allDataRows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Ban hang");
+            XLSX.writeFile(wb, `Tong_Hop_Mau_Ban_Hang_MISA_${thanhCongCount}_CT.xlsx`);
+            log(`==================================================`);
+            log(`🎉 ĐÃ HOÀN THÀNH TẠO ${thanhCongCount}/${tongSoHDCanTao} CHỨNG TỪ.`);
+            log(`👉 Số chứng từ kế tiếp: ${runningSoCT}`);
+            log(`👉 Số phiếu xuất tiếp theo: ${runningSoPX}`);
+            alert(`Đã xuất thành công ${thanhCongCount}/${tongSoHDCanTao} chứng từ!\n- Chứng từ tiếp theo: ${runningSoCT}\n- Phiếu xuất tiếp theo: ${runningSoPX}`);
+        }
+    });
+</script>
+</body>
+</html>
